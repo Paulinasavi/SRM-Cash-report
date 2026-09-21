@@ -1,0 +1,1315 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<title>Generator raportu SRM</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<!-- ExcelJS is used only for the final download step: unlike the free SheetJS
+     build above (which can read files but cannot write cell colors/fonts),
+     ExcelJS can write a fully-styled .xlsx client-side, so the downloaded
+     file keeps its colors even when opened on a computer with no access to
+     this app or any server. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<style>
+  :root{
+    --navy:#1f3a5f; --navy-dark:#16293f; --accent:#305496;
+    --bg:#f4f6f9; --card:#ffffff; --border:#dfe3e8; --text:#2b2f36;
+    --muted:#6b7280; --ok:#1a7f37; --warn:#b45309; --warn-bg:#fff7e6;
+  }
+  *{box-sizing:border-box;}
+  body{
+    font-family:Arial, Helvetica, sans-serif; background:var(--bg); color:var(--text);
+    margin:0; padding:24px; line-height:1.45;
+  }
+  .wrap{max-width:1100px; margin:0 auto;}
+  h1{font-size:22px; color:var(--navy-dark); margin:0 0 4px;}
+  .subtitle{color:var(--muted); margin:0 0 24px; font-size:14px;}
+  .topbar{display:flex; justify-content:space-between; align-items:flex-start; gap:16px;}
+  .topbar-title{flex:1; min-width:0;}
+  .lang-switcher{flex-shrink:0;}
+  .lang-switcher select{
+    width:auto; min-width:140px; padding:7px 10px; border:1px solid var(--border); border-radius:6px;
+    font-size:13px; font-weight:bold; background:#fff; color:var(--navy-dark); cursor:pointer;
+    box-shadow:0 1px 3px rgba(0,0,0,0.08);
+  }
+  @media (max-width:600px){ .topbar{flex-direction:column;} .lang-switcher{align-self:flex-end;} }
+  .card{
+    background:var(--card); border:1px solid var(--border); border-radius:10px;
+    padding:20px 22px; margin-bottom:18px;
+  }
+  .card h2{font-size:16px; margin:0 0 14px; color:var(--navy-dark);}
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:20px;}
+  @media (max-width:820px){ .grid2{grid-template-columns:1fr;} }
+  .field{margin-bottom:10px;}
+  .field label{display:block; font-size:12.5px; color:var(--muted); margin-bottom:4px;}
+  .field input[type=text]{
+    width:100%; padding:7px 9px; border:1px solid var(--border); border-radius:6px;
+    font-size:13px; font-family:Arial, sans-serif;
+  }
+  input[type=file]{font-size:13px;}
+  select{
+    width:100%; padding:7px 9px; border:1px solid var(--border); border-radius:6px;
+    font-size:13px; background:#fff;
+  }
+  .file-status{font-size:12.5px; margin-top:6px; color:var(--muted);}
+  .file-status.loaded{color:var(--ok); font-weight:bold;}
+  details{margin-top:12px;}
+  summary{cursor:pointer; font-size:13px; color:var(--accent); font-weight:bold; user-select:none;}
+  .mapping-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px 16px; margin-top:12px;}
+  .checkbox-list{
+    max-height:160px; overflow-y:auto; border:1px solid var(--border); border-radius:6px;
+    padding:6px 10px; background:#fff;
+  }
+  .checkbox-list label{
+    display:flex; align-items:center; gap:6px; font-size:13px; padding:3px 0; cursor:pointer;
+  }
+  .checkbox-list input[type=checkbox]{margin:0; cursor:pointer;}
+  .checkbox-list-empty{font-size:12.5px; color:var(--muted); padding:4px 0;}
+  .checkbox-actions{display:flex; gap:14px; margin-top:6px;}
+  .btn-link{
+    background:none; border:none; padding:0; color:var(--accent); font-size:12px;
+    font-weight:bold; cursor:pointer; text-decoration:underline;
+  }
+  .btn-link:hover{color:var(--navy-dark);}
+  .btn{
+    background:var(--accent); color:#fff; border:none; padding:11px 22px; border-radius:7px;
+    font-size:14px; font-weight:bold; cursor:pointer;
+  }
+  .btn:hover{background:var(--navy-dark);}
+  .btn:disabled{background:#a9b4c2; cursor:not-allowed;}
+  .btn.secondary{background:#fff; color:var(--accent); border:1px solid var(--accent);}
+  .btn.secondary:hover{background:#eef2f8;}
+  .actions{display:flex; gap:12px; align-items:center; margin-top:6px;}
+  .error-box{
+    background:#fdecea; border:1px solid #f3b4ac; color:#8a2a1f; padding:12px 14px;
+    border-radius:8px; font-size:13.5px; margin-top:14px; display:none;
+  }
+  .summary-grid{display:grid; grid-template-columns:repeat(5,1fr); gap:12px; margin-bottom:16px;}
+  @media (max-width:820px){ .summary-grid{grid-template-columns:repeat(2,1fr);} }
+  .stat{background:#f8fafc; border:1px solid var(--border); border-radius:8px; padding:12px; text-align:center;}
+  .stat .num{font-size:22px; font-weight:bold; color:var(--navy-dark);}
+  .stat .lbl{font-size:11.5px; color:var(--muted); margin-top:2px;}
+  .status-line{font-size:13.5px; padding:10px 12px; border-radius:7px; margin-bottom:14px;}
+  .status-line.ok{background:#eaf6ec; color:var(--ok); border:1px solid #b9e3bf;}
+  table{border-collapse:collapse; width:100%; font-size:12.5px;}
+  th,td{border:1px solid var(--border); padding:6px 9px; text-align:left;}
+  th{background:var(--accent); color:#fff; position:sticky; top:0;}
+  tr.flag{background:var(--warn-bg);}
+  tr.flag td:last-child{color:var(--warn);}
+  tr.subtotal td{background:#eef2f8; font-weight:bold;}
+  tr.grandtotal td{background:#d9e2f0; font-weight:bold; border-top:2px solid var(--accent);}
+  .table-scroll{max-height:480px; overflow:auto; border:1px solid var(--border); border-radius:8px;}
+  .hint{font-size:12px; color:var(--muted); margin-top:4px;}
+  .badge{display:inline-block; background:#eef2f8; color:var(--accent); font-size:11px; padding:2px 8px; border-radius:20px; margin-left:6px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div class="topbar-title">
+      <h1 data-i18n="title">Generator raportu SRM</h1>
+      <p class="subtitle" data-i18n="subtitle">Wgraj plik Status Payments oraz plik Cash, aby automatycznie wygenerować raport SRM w stałym formacie.</p>
+    </div>
+    <div class="lang-switcher">
+      <select id="langSelect" aria-label="Language / Język / Lingua / Sprache / Idioma">
+        <option value="pl">🇵🇱 Polski</option>
+        <option value="en">🇬🇧 English</option>
+        <option value="it">🇮🇹 Italiano</option>
+        <option value="de">🇩🇪 Deutsch</option>
+        <option value="es">🇪🇸 Español</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h2>1. Status Payments <span class="badge" data-i18n="section1_badge">batch + week</span></h2>
+      <div class="field">
+        <label data-i18n="label_file">Plik (.xlsx)</label>
+        <input type="file" id="statusFile" accept=".xlsx,.xls">
+      </div>
+      <div class="field">
+        <label data-i18n="label_sheet">Arkusz</label>
+        <select id="statusSheet" disabled><option data-i18n="opt_upload_file">— wgraj plik —</option></select>
+      </div>
+      <div id="statusFileStatus" class="file-status" data-i18n="status_no_file">Brak wgranego pliku.</div>
+
+      <details>
+        <summary data-i18n="summary_mapping">Mapowanie kolumn (zaawansowane)</summary>
+        <div class="mapping-grid">
+          <div class="field">
+            <label data-i18n="label_col_batch_code">Kolumna z kodem batcha</label>
+            <input type="text" id="mapStatusBatch" value="Batch">
+          </div>
+          <div class="field">
+            <label data-i18n="label_col_week">Kolumna z week</label>
+            <input type="text" id="mapStatusWeek" value="WK">
+          </div>
+          <div class="field">
+            <label data-i18n="label_col_batch_name">Kolumna z nazwą klienta (Batch name)</label>
+            <input type="text" id="mapStatusBatchName" value="Batch name">
+          </div>
+        </div>
+        <p class="hint" data-i18n="hint_status_mapping">Uwaga: kluczem dopasowania jest kod batcha (kolumna „Batch”, np. D1555A00), a nie nazwa klienta (kolumna „Batch name”, np. Asda) — te dwie kolumny to różne rzeczy. Nazwa klienta służy tylko do filtrowania poniżej.</p>
+      </details>
+    </div>
+
+    <div class="card">
+      <h2>2. Cash <span class="badge" data-i18n="section2_badge">kwoty</span></h2>
+      <div class="field">
+        <label data-i18n="label_file">Plik (.xlsx)</label>
+        <input type="file" id="cashFile" accept=".xlsx,.xls">
+      </div>
+      <div class="field">
+        <label data-i18n="label_sheet">Arkusz</label>
+        <select id="cashSheet" disabled><option data-i18n="opt_upload_file">— wgraj plik —</option></select>
+      </div>
+      <div id="cashFileStatus" class="file-status" data-i18n="status_no_file">Brak wgranego pliku.</div>
+
+      <details>
+        <summary data-i18n="summary_mapping">Mapowanie kolumn (zaawansowane)</summary>
+        <div class="mapping-grid">
+          <div class="field">
+            <label data-i18n="label_col_batch_code">Kolumna z kodem batcha</label>
+            <input type="text" id="mapCashBatch" value="Batch">
+          </div>
+          <div class="field">
+            <label data-i18n="label_col_gbp">Kolumna z kwotą (GBP)</label>
+            <input type="text" id="mapCashGbp" value="Value £">
+          </div>
+          <div class="field">
+            <label data-i18n="label_col_ploa">Kolumna PLOA</label>
+            <input type="text" id="mapCashPloa" value="PLOA">
+          </div>
+          <div class="field">
+            <label data-i18n="label_col_week_cash">Kolumna Week</label>
+            <input type="text" id="mapCashWeek" value="Week">
+          </div>
+          <div class="field">
+            <label data-i18n="label_col_branch">Kolumna Branch</label>
+            <input type="text" id="mapCashBranch" value="Branch">
+          </div>
+          <div class="field">
+            <label data-i18n="label_col_eur">Kolumna z kwotą (EUR)</label>
+            <input type="text" id="mapCashEur" value="Value €">
+          </div>
+          <div class="field">
+            <label data-i18n="label_col_other">Kolumna „inna waluta”</label>
+            <input type="text" id="mapCashOther" value="Value - other">
+          </div>
+          <div class="field">
+            <label data-i18n="label_col_ccy">Kolumna z walutą</label>
+            <input type="text" id="mapCashCcy" value="Currency">
+          </div>
+        </div>
+        <p class="hint" data-i18n="hint_cash_mapping">Raport SRM wypisuje pojedyncze transakcje z Cash (PLOA / Week / Batch / Branch / GBP) dla batchy z Status Payments, pogrupowane po week z podsumowaniami (jak w pliku „Cash submitted in Asda batches”). Kwoty w EUR / innej walucie nie są ujmowane w GBP.</p>
+      </details>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>3. <span data-i18n="section3_title">Filtry raportu</span> <span class="badge" data-i18n="section3_badge">opcjonalnie</span></h2>
+    <div class="mapping-grid">
+      <div class="field">
+        <label data-i18n="label_filter_batchname">Nazwa klienta (Batch name)</label>
+        <select id="filterBatchName" disabled><option value="" data-i18n="opt_upload_status">— wgraj plik Status Payments —</option></select>
+      </div>
+      <div class="field">
+        <label data-i18n="label_filter_batch">Batch (zaznacz checkboxy)</label>
+        <div class="checkbox-list" id="filterBatchList">
+          <div class="checkbox-list-empty" data-i18n="opt_upload_status">— wgraj plik Status Payments —</div>
+        </div>
+        <div class="checkbox-actions">
+          <button type="button" class="btn-link" id="selectAllBatches" data-i18n="btn_select_all">Zaznacz wszystkie</button>
+          <button type="button" class="btn-link" id="clearBatches" data-i18n="btn_clear">Wyczyść</button>
+        </div>
+        <p class="hint" data-i18n="hint_no_selection">Brak zaznaczonych = wszystkie batche.</p>
+      </div>
+      <div class="field">
+        <label data-i18n="label_week_from">Week od</label>
+        <input type="text" id="filterWeekFrom" placeholder="np. 1" data-i18n-placeholder="ph_week_from">
+      </div>
+      <div class="field">
+        <label data-i18n="label_week_to">Week do</label>
+        <input type="text" id="filterWeekTo" placeholder="np. 13" data-i18n-placeholder="ph_week_to">
+      </div>
+    </div>
+    <p class="hint" data-i18n="hint_filters_general">Zostaw „Wszystkie” / puste pola, żeby objąć cały plik. Batche bez przypisanego week zawsze zostają w raporcie (oznaczone jako „Brak week”), niezależnie od zakresu week.</p>
+  </div>
+
+  <div class="card">
+    <div class="actions">
+      <button class="btn" id="generateBtn" data-i18n="btn_generate">Generate SRM</button>
+      <button class="btn secondary" id="downloadBtn" disabled data-i18n="btn_download">Pobierz plik SRM (.xlsx)</button>
+    </div>
+    <div class="error-box" id="errorBox"></div>
+  </div>
+
+  <div class="card" id="resultsCard" style="display:none;">
+    <h2 data-i18n="heading_result">Wynik</h2>
+    <div class="status-line ok" id="statusLine"></div>
+    <div class="summary-grid" id="summaryGrid"></div>
+    <div id="reportTitleLine" style="font-weight:bold; color:var(--navy-dark); margin-bottom:8px;"></div>
+    <div class="table-scroll">
+      <table id="resultTable">
+        <thead><tr><th>PLOA</th><th>Week</th><th>Batch</th><th>Branch</th><th>GBP</th></tr></thead>
+        <tbody id="resultBody"></tbody>
+      </table>
+    </div>
+    <p class="hint" id="nonGbpNote"></p>
+  </div>
+</div>
+
+<script>
+let statusWB = null, cashWB = null;
+let lastRows = null; // holds generated SRM detail rows for download
+let lastFilterInfo = null; // holds filters used for the last generated report
+let lastTitle = null; // holds the report title used for the last generated report
+let lastStats = null; // holds the summary stats for the last generated report (for re-render on language switch)
+
+// ---------- i18n ----------
+// Translates the tool's own UI (labels, buttons, hints, messages). The
+// generated SRM Excel file itself always keeps its fixed English column
+// headers / "Sum" / "Sum Totals" wording, per the "file must always look
+// the same" requirement - only the on-screen web app translates.
+let currentLang = 'pl';
+const LANG_TAGS = { pl:'pl', en:'en-GB', it:'it', de:'de', es:'es' };
+const I18N = {
+  pl: {
+    title: 'Generator raportu SRM',
+    subtitle: 'Wgraj plik Status Payments oraz plik Cash, aby automatycznie wygenerować raport SRM w stałym formacie.',
+    section1_badge: 'batch + week',
+    section2_badge: 'kwoty',
+    section3_title: 'Filtry raportu',
+    section3_badge: 'opcjonalnie',
+    label_file: 'Plik (.xlsx)',
+    label_sheet: 'Arkusz',
+    opt_upload_file: '— wgraj plik —',
+    status_no_file: 'Brak wgranego pliku.',
+    summary_mapping: 'Mapowanie kolumn (zaawansowane)',
+    label_col_batch_code: 'Kolumna z kodem batcha',
+    label_col_week: 'Kolumna z week',
+    label_col_batch_name: 'Kolumna z nazwą klienta (Batch name)',
+    hint_status_mapping: 'Uwaga: kluczem dopasowania jest kod batcha (kolumna „Batch”, np. D1555A00), a nie nazwa klienta (kolumna „Batch name”, np. Asda) — te dwie kolumny to różne rzeczy. Nazwa klienta służy tylko do filtrowania poniżej.',
+    label_col_gbp: 'Kolumna z kwotą (GBP)',
+    label_col_ploa: 'Kolumna PLOA',
+    label_col_week_cash: 'Kolumna Week',
+    label_col_branch: 'Kolumna Branch',
+    label_col_eur: 'Kolumna z kwotą (EUR)',
+    label_col_other: 'Kolumna „inna waluta”',
+    label_col_ccy: 'Kolumna z walutą',
+    hint_cash_mapping: 'Raport SRM wypisuje pojedyncze transakcje z Cash (PLOA / Week / Batch / Branch / GBP) dla batchy z Status Payments, pogrupowane po week z podsumowaniami (jak w pliku „Cash submitted in Asda batches”). Kwoty w EUR / innej walucie nie są ujmowane w GBP.',
+    label_filter_batchname: 'Nazwa klienta (Batch name)',
+    opt_upload_status: '— wgraj plik Status Payments —',
+    opt_filter_all: 'Wszystkie',
+    label_filter_batch: 'Batch (zaznacz checkboxy)',
+    btn_select_all: 'Zaznacz wszystkie',
+    btn_clear: 'Wyczyść',
+    hint_no_selection: 'Brak zaznaczonych = wszystkie batche.',
+    label_week_from: 'Week od',
+    ph_week_from: 'np. 1',
+    label_week_to: 'Week do',
+    ph_week_to: 'np. 13',
+    hint_filters_general: 'Zostaw „Wszystkie” / puste pola, żeby objąć cały plik. Batche bez przypisanego week zawsze zostają w raporcie (oznaczone jako „Brak week”), niezależnie od zakresu week.',
+    btn_generate: 'Generate SRM',
+    btn_download: 'Pobierz plik SRM (.xlsx)',
+    heading_result: 'Wynik',
+    status_loading: 'Wczytywanie…',
+    status_loaded: '✓ Wgrano: {name} ({count} arkuszy)',
+    status_load_error: 'Błąd wczytywania pliku: {msg}',
+    no_batches_for_filter: 'Brak batchy dla wybranego filtru.',
+    err_no_status_file: 'Brak pliku Status Payments — dodaj plik przed wygenerowaniem raportu.',
+    err_no_cash_file: 'Brak pliku Cash — dodaj plik przed wygenerowaniem raportu.',
+    err_no_sheet_selected: 'Nie wybrano arkusza w jednym z plików.',
+    err_columns_not_found: 'Nie znaleziono kolumn "{a}" / "{b}" w arkuszu "{sheet}". Sprawdź mapowanie kolumn.',
+    err_batch_col_not_found_status: 'Nie znaleziono kolumny batcha "{col}" w Status Payments.',
+    err_batch_col_not_found_cash: 'Nie znaleziono kolumny batcha "{col}" w Cash.',
+    err_no_batches_match_filters: 'Brak batchy spełniających wybrane filtry (nazwa klienta / batch / zakres week). Zmień filtry i spróbuj ponownie.',
+    err_no_cash_transactions: 'Brak transakcji w Cash (z kwotą GBP) dla wybranych batchy / zakresu week.',
+    msg_success: '✓ Raport SRM wygenerowany poprawnie — {count} transakcji.',
+    filter_display_batchname: 'Nazwa klienta = {name}',
+    filter_display_batch: 'Batch = {list}',
+    filter_display_week: 'Week {from}–{to}',
+    filters_prefix: ' Filtry: ',
+    stat_total_batches: 'Batchy w zakresie',
+    stat_matched: 'Batchy z kwotą w Cash',
+    stat_no_amount: 'Batchy bez kwoty w Cash',
+    stat_no_week: 'Bez week (Status Payments)',
+    stat_duplicates: 'Duplikatów batcha',
+    note_non_gbp: 'Dodatkowo: {count} transakcji w Cash dla tych batchy ma kwotę tylko w EUR / innej walucie — pominięte w raporcie (nie wliczają się do GBP).',
+    btn_generating: 'Generuję plik…',
+    err_generating_file: 'Błąd podczas generowania pliku: {msg}',
+  },
+  en: {
+    title: 'SRM Report Generator',
+    subtitle: 'Upload the Status Payments file and the Cash file to automatically generate an SRM report in a fixed format.',
+    section1_badge: 'batch + week',
+    section2_badge: 'amounts',
+    section3_title: 'Report filters',
+    section3_badge: 'optional',
+    label_file: 'File (.xlsx)',
+    label_sheet: 'Sheet',
+    opt_upload_file: '— upload a file —',
+    status_no_file: 'No file uploaded.',
+    summary_mapping: 'Column mapping (advanced)',
+    label_col_batch_code: 'Batch code column',
+    label_col_week: 'Week column',
+    label_col_batch_name: 'Client name column (Batch name)',
+    hint_status_mapping: 'Note: the matching key is the batch code (the "Batch" column, e.g. D1555A00), not the client name (the "Batch name" column, e.g. Asda) — these are two different things. The client name is only used for filtering below.',
+    label_col_gbp: 'Amount column (GBP)',
+    label_col_ploa: 'PLOA column',
+    label_col_week_cash: 'Week column',
+    label_col_branch: 'Branch column',
+    label_col_eur: 'Amount column (EUR)',
+    label_col_other: '"Other currency" column',
+    label_col_ccy: 'Currency column',
+    hint_cash_mapping: 'The SRM report lists individual Cash transactions (PLOA / Week / Batch / Branch / GBP) for the batches found in Status Payments, grouped by week with subtotals (as in the "Cash submitted in Asda batches" file). Amounts in EUR / another currency are not included in GBP.',
+    label_filter_batchname: 'Client name (Batch name)',
+    opt_upload_status: '— upload the Status Payments file —',
+    opt_filter_all: 'All',
+    label_filter_batch: 'Batch (tick checkboxes)',
+    btn_select_all: 'Select all',
+    btn_clear: 'Clear',
+    hint_no_selection: 'Nothing selected = all batches.',
+    label_week_from: 'Week from',
+    ph_week_from: 'e.g. 1',
+    label_week_to: 'Week to',
+    ph_week_to: 'e.g. 13',
+    hint_filters_general: 'Leave "All" / the fields empty to cover the whole file. Batches with no assigned week always stay in the report (flagged as "Missing week"), regardless of the week range.',
+    btn_generate: 'Generate SRM',
+    btn_download: 'Download SRM file (.xlsx)',
+    heading_result: 'Result',
+    status_loading: 'Loading…',
+    status_loaded: '✓ Loaded: {name} ({count} sheets)',
+    status_load_error: 'Error loading file: {msg}',
+    no_batches_for_filter: 'No batches match the selected filter.',
+    err_no_status_file: 'Missing the Status Payments file — add it before generating the report.',
+    err_no_cash_file: 'Missing the Cash file — add it before generating the report.',
+    err_no_sheet_selected: 'No sheet selected in one of the files.',
+    err_columns_not_found: 'Columns "{a}" / "{b}" not found in sheet "{sheet}". Check the column mapping.',
+    err_batch_col_not_found_status: 'Batch column "{col}" not found in Status Payments.',
+    err_batch_col_not_found_cash: 'Batch column "{col}" not found in Cash.',
+    err_no_batches_match_filters: 'No batches match the selected filters (client name / batch / week range). Change the filters and try again.',
+    err_no_cash_transactions: 'No Cash transactions (with a GBP amount) for the selected batches / week range.',
+    msg_success: '✓ SRM report generated successfully — {count} transactions.',
+    filter_display_batchname: 'Client name = {name}',
+    filter_display_batch: 'Batch = {list}',
+    filter_display_week: 'Week {from}–{to}',
+    filters_prefix: ' Filters: ',
+    stat_total_batches: 'Batches in range',
+    stat_matched: 'Batches with a Cash amount',
+    stat_no_amount: 'Batches with no Cash amount',
+    stat_no_week: 'Missing week (Status Payments)',
+    stat_duplicates: 'Duplicate batches',
+    note_non_gbp: 'Additionally: {count} Cash transactions for these batches only have an amount in EUR / another currency — excluded from the report (not counted in GBP).',
+    btn_generating: 'Generating file…',
+    err_generating_file: 'Error generating the file: {msg}',
+  },
+  it: {
+    title: 'Generatore report SRM',
+    subtitle: 'Carica il file Status Payments e il file Cash per generare automaticamente un report SRM in un formato fisso.',
+    section1_badge: 'batch + settimana',
+    section2_badge: 'importi',
+    section3_title: 'Filtri del report',
+    section3_badge: 'opzionale',
+    label_file: 'File (.xlsx)',
+    label_sheet: 'Foglio',
+    opt_upload_file: '— carica un file —',
+    status_no_file: 'Nessun file caricato.',
+    summary_mapping: 'Mappatura colonne (avanzate)',
+    label_col_batch_code: 'Colonna codice batch',
+    label_col_week: 'Colonna week',
+    label_col_batch_name: 'Colonna nome cliente (Batch name)',
+    hint_status_mapping: 'Nota: la chiave di corrispondenza è il codice batch (colonna "Batch", es. D1555A00), non il nome del cliente (colonna "Batch name", es. Asda) — sono due cose diverse. Il nome del cliente serve solo per il filtro qui sotto.',
+    label_col_gbp: 'Colonna importo (GBP)',
+    label_col_ploa: 'Colonna PLOA',
+    label_col_week_cash: 'Colonna Week',
+    label_col_branch: 'Colonna Branch',
+    label_col_eur: 'Colonna importo (EUR)',
+    label_col_other: 'Colonna "altra valuta"',
+    label_col_ccy: 'Colonna valuta',
+    hint_cash_mapping: 'Il report SRM elenca le singole transazioni Cash (PLOA / Week / Batch / Branch / GBP) per i batch presenti in Status Payments, raggruppate per settimana con subtotali (come nel file "Cash submitted in Asda batches"). Gli importi in EUR / altra valuta non sono inclusi in GBP.',
+    label_filter_batchname: 'Nome cliente (Batch name)',
+    opt_upload_status: '— carica il file Status Payments —',
+    opt_filter_all: 'Tutti',
+    label_filter_batch: 'Batch (seleziona le caselle)',
+    btn_select_all: 'Seleziona tutti',
+    btn_clear: 'Cancella',
+    hint_no_selection: 'Nessuna selezione = tutti i batch.',
+    label_week_from: 'Week da',
+    ph_week_from: 'es. 1',
+    label_week_to: 'Week a',
+    ph_week_to: 'es. 13',
+    hint_filters_general: 'Lascia "Tutti" / i campi vuoti per includere l\'intero file. I batch senza week assegnata restano sempre nel report (contrassegnati come "Week mancante"), indipendentemente dall\'intervallo di settimane.',
+    btn_generate: 'Genera SRM',
+    btn_download: 'Scarica file SRM (.xlsx)',
+    heading_result: 'Risultato',
+    status_loading: 'Caricamento…',
+    status_loaded: '✓ Caricato: {name} ({count} fogli)',
+    status_load_error: 'Errore nel caricamento del file: {msg}',
+    no_batches_for_filter: 'Nessun batch corrisponde al filtro selezionato.',
+    err_no_status_file: 'Manca il file Status Payments — aggiungilo prima di generare il report.',
+    err_no_cash_file: 'Manca il file Cash — aggiungilo prima di generare il report.',
+    err_no_sheet_selected: 'Nessun foglio selezionato in uno dei file.',
+    err_columns_not_found: 'Colonne "{a}" / "{b}" non trovate nel foglio "{sheet}". Controlla la mappatura delle colonne.',
+    err_batch_col_not_found_status: 'Colonna batch "{col}" non trovata in Status Payments.',
+    err_batch_col_not_found_cash: 'Colonna batch "{col}" non trovata in Cash.',
+    err_no_batches_match_filters: 'Nessun batch soddisfa i filtri selezionati (nome cliente / batch / intervallo settimane). Modifica i filtri e riprova.',
+    err_no_cash_transactions: 'Nessuna transazione in Cash (con importo GBP) per i batch / l\'intervallo di settimane selezionati.',
+    msg_success: '✓ Report SRM generato correttamente — {count} transazioni.',
+    filter_display_batchname: 'Nome cliente = {name}',
+    filter_display_batch: 'Batch = {list}',
+    filter_display_week: 'Week {from}–{to}',
+    filters_prefix: ' Filtri: ',
+    stat_total_batches: 'Batch nell\'intervallo',
+    stat_matched: 'Batch con importo in Cash',
+    stat_no_amount: 'Batch senza importo in Cash',
+    stat_no_week: 'Senza week (Status Payments)',
+    stat_duplicates: 'Batch duplicati',
+    note_non_gbp: 'Inoltre: {count} transazioni in Cash per questi batch hanno un importo solo in EUR / altra valuta — escluse dal report (non conteggiate in GBP).',
+    btn_generating: 'Generazione file…',
+    err_generating_file: 'Errore durante la generazione del file: {msg}',
+  },
+  de: {
+    title: 'SRM-Berichtsgenerator',
+    subtitle: 'Laden Sie die Datei Status Payments und die Datei Cash hoch, um automatisch einen SRM-Bericht in einem festen Format zu erstellen.',
+    section1_badge: 'Batch + Woche',
+    section2_badge: 'Beträge',
+    section3_title: 'Berichtsfilter',
+    section3_badge: 'optional',
+    label_file: 'Datei (.xlsx)',
+    label_sheet: 'Tabellenblatt',
+    opt_upload_file: '— Datei hochladen —',
+    status_no_file: 'Keine Datei hochgeladen.',
+    summary_mapping: 'Spaltenzuordnung (erweitert)',
+    label_col_batch_code: 'Spalte mit Batch-Code',
+    label_col_week: 'Spalte mit Week',
+    label_col_batch_name: 'Spalte mit Kundenname (Batch name)',
+    hint_status_mapping: 'Hinweis: Der Abgleichsschlüssel ist der Batch-Code (Spalte „Batch", z. B. D1555A00), nicht der Kundenname (Spalte „Batch name", z. B. Asda) — das sind zwei unterschiedliche Dinge. Der Kundenname dient nur zum Filtern weiter unten.',
+    label_col_gbp: 'Spalte mit Betrag (GBP)',
+    label_col_ploa: 'Spalte PLOA',
+    label_col_week_cash: 'Spalte Week',
+    label_col_branch: 'Spalte Branch',
+    label_col_eur: 'Spalte mit Betrag (EUR)',
+    label_col_other: 'Spalte „andere Währung"',
+    label_col_ccy: 'Spalte mit Währung',
+    hint_cash_mapping: 'Der SRM-Bericht listet einzelne Cash-Transaktionen (PLOA / Week / Batch / Branch / GBP) für die in Status Payments gefundenen Batches auf, gruppiert nach Woche mit Zwischensummen (wie in der Datei „Cash submitted in Asda batches"). Beträge in EUR / anderer Währung werden nicht in GBP berücksichtigt.',
+    label_filter_batchname: 'Kundenname (Batch name)',
+    opt_upload_status: '— Status-Payments-Datei hochladen —',
+    opt_filter_all: 'Alle',
+    label_filter_batch: 'Batch (Kontrollkästchen auswählen)',
+    btn_select_all: 'Alle auswählen',
+    btn_clear: 'Leeren',
+    hint_no_selection: 'Keine Auswahl = alle Batches.',
+    label_week_from: 'Week von',
+    ph_week_from: 'z. B. 1',
+    label_week_to: 'Week bis',
+    ph_week_to: 'z. B. 13',
+    hint_filters_general: 'Lassen Sie „Alle" / die Felder leer, um die gesamte Datei einzuschließen. Batches ohne zugewiesene Week bleiben unabhängig vom Wochenbereich immer im Bericht (markiert als „Week fehlt").',
+    btn_generate: 'SRM generieren',
+    btn_download: 'SRM-Datei herunterladen (.xlsx)',
+    heading_result: 'Ergebnis',
+    status_loading: 'Wird geladen…',
+    status_loaded: '✓ Geladen: {name} ({count} Tabellenblätter)',
+    status_load_error: 'Fehler beim Laden der Datei: {msg}',
+    no_batches_for_filter: 'Keine Batches für den gewählten Filter.',
+    err_no_status_file: 'Status-Payments-Datei fehlt — fügen Sie sie hinzu, bevor Sie den Bericht erstellen.',
+    err_no_cash_file: 'Cash-Datei fehlt — fügen Sie sie hinzu, bevor Sie den Bericht erstellen.',
+    err_no_sheet_selected: 'In einer der Dateien wurde kein Tabellenblatt ausgewählt.',
+    err_columns_not_found: 'Spalten „{a}" / „{b}" im Tabellenblatt „{sheet}" nicht gefunden. Prüfen Sie die Spaltenzuordnung.',
+    err_batch_col_not_found_status: 'Batch-Spalte „{col}" in Status Payments nicht gefunden.',
+    err_batch_col_not_found_cash: 'Batch-Spalte „{col}" in Cash nicht gefunden.',
+    err_no_batches_match_filters: 'Keine Batches entsprechen den gewählten Filtern (Kundenname / Batch / Wochenbereich). Ändern Sie die Filter und versuchen Sie es erneut.',
+    err_no_cash_transactions: 'Keine Cash-Transaktionen (mit GBP-Betrag) für die gewählten Batches / den Wochenbereich.',
+    msg_success: '✓ SRM-Bericht erfolgreich erstellt — {count} Transaktionen.',
+    filter_display_batchname: 'Kundenname = {name}',
+    filter_display_batch: 'Batch = {list}',
+    filter_display_week: 'Week {from}–{to}',
+    filters_prefix: ' Filter: ',
+    stat_total_batches: 'Batches im Bereich',
+    stat_matched: 'Batches mit Cash-Betrag',
+    stat_no_amount: 'Batches ohne Cash-Betrag',
+    stat_no_week: 'Ohne Week (Status Payments)',
+    stat_duplicates: 'Doppelte Batches',
+    note_non_gbp: 'Zusätzlich: {count} Cash-Transaktionen für diese Batches haben nur einen Betrag in EUR / anderer Währung — im Bericht ausgeschlossen (nicht in GBP enthalten).',
+    btn_generating: 'Datei wird erstellt…',
+    err_generating_file: 'Fehler beim Erstellen der Datei: {msg}',
+  },
+  es: {
+    title: 'Generador de informes SRM',
+    subtitle: 'Sube el archivo Status Payments y el archivo Cash para generar automáticamente un informe SRM con un formato fijo.',
+    section1_badge: 'batch + semana',
+    section2_badge: 'importes',
+    section3_title: 'Filtros del informe',
+    section3_badge: 'opcional',
+    label_file: 'Archivo (.xlsx)',
+    label_sheet: 'Hoja',
+    opt_upload_file: '— sube un archivo —',
+    status_no_file: 'Ningún archivo cargado.',
+    summary_mapping: 'Asignación de columnas (avanzado)',
+    label_col_batch_code: 'Columna con el código de batch',
+    label_col_week: 'Columna con week',
+    label_col_batch_name: 'Columna con el nombre del cliente (Batch name)',
+    hint_status_mapping: 'Nota: la clave de coincidencia es el código de batch (columna "Batch", p. ej. D1555A00), no el nombre del cliente (columna "Batch name", p. ej. Asda) — son dos cosas distintas. El nombre del cliente solo se usa para filtrar más abajo.',
+    label_col_gbp: 'Columna con el importe (GBP)',
+    label_col_ploa: 'Columna PLOA',
+    label_col_week_cash: 'Columna Week',
+    label_col_branch: 'Columna Branch',
+    label_col_eur: 'Columna con el importe (EUR)',
+    label_col_other: 'Columna "otra moneda"',
+    label_col_ccy: 'Columna con la moneda',
+    hint_cash_mapping: 'El informe SRM muestra las transacciones individuales de Cash (PLOA / Week / Batch / Branch / GBP) para los batches encontrados en Status Payments, agrupadas por semana con subtotales (como en el archivo "Cash submitted in Asda batches"). Los importes en EUR / otra moneda no se incluyen en GBP.',
+    label_filter_batchname: 'Nombre del cliente (Batch name)',
+    opt_upload_status: '— sube el archivo Status Payments —',
+    opt_filter_all: 'Todos',
+    label_filter_batch: 'Batch (marca las casillas)',
+    btn_select_all: 'Seleccionar todos',
+    btn_clear: 'Borrar',
+    hint_no_selection: 'Sin selección = todos los batches.',
+    label_week_from: 'Week desde',
+    ph_week_from: 'p. ej. 1',
+    label_week_to: 'Week hasta',
+    ph_week_to: 'p. ej. 13',
+    hint_filters_general: 'Deja "Todos" / los campos vacíos para incluir todo el archivo. Los batches sin week asignada siempre permanecen en el informe (marcados como "Falta week"), independientemente del rango de semanas.',
+    btn_generate: 'Generar SRM',
+    btn_download: 'Descargar archivo SRM (.xlsx)',
+    heading_result: 'Resultado',
+    status_loading: 'Cargando…',
+    status_loaded: '✓ Cargado: {name} ({count} hojas)',
+    status_load_error: 'Error al cargar el archivo: {msg}',
+    no_batches_for_filter: 'No hay batches para el filtro seleccionado.',
+    err_no_status_file: 'Falta el archivo Status Payments — añádelo antes de generar el informe.',
+    err_no_cash_file: 'Falta el archivo Cash — añádelo antes de generar el informe.',
+    err_no_sheet_selected: 'No se ha seleccionado ninguna hoja en uno de los archivos.',
+    err_columns_not_found: 'No se encontraron las columnas "{a}" / "{b}" en la hoja "{sheet}". Revisa la asignación de columnas.',
+    err_batch_col_not_found_status: 'No se encontró la columna de batch "{col}" en Status Payments.',
+    err_batch_col_not_found_cash: 'No se encontró la columna de batch "{col}" en Cash.',
+    err_no_batches_match_filters: 'Ningún batch cumple los filtros seleccionados (nombre del cliente / batch / rango de semanas). Cambia los filtros e inténtalo de nuevo.',
+    err_no_cash_transactions: 'No hay transacciones en Cash (con importe en GBP) para los batches / el rango de semanas seleccionados.',
+    msg_success: '✓ Informe SRM generado correctamente — {count} transacciones.',
+    filter_display_batchname: 'Nombre del cliente = {name}',
+    filter_display_batch: 'Batch = {list}',
+    filter_display_week: 'Week {from}–{to}',
+    filters_prefix: ' Filtros: ',
+    stat_total_batches: 'Batches en el rango',
+    stat_matched: 'Batches con importe en Cash',
+    stat_no_amount: 'Batches sin importe en Cash',
+    stat_no_week: 'Sin week (Status Payments)',
+    stat_duplicates: 'Batches duplicados',
+    note_non_gbp: 'Además: {count} transacciones en Cash para estos batches solo tienen importe en EUR / otra moneda — excluidas del informe (no se cuentan en GBP).',
+    btn_generating: 'Generando archivo…',
+    err_generating_file: 'Error al generar el archivo: {msg}',
+  },
+};
+
+// Looks up a translated string for the current language (falling back to
+// Polish, then to the raw key) and substitutes {placeholders} with vars.
+function t(key, vars){
+  let s = (I18N[currentLang] && I18N[currentLang][key]) || I18N.pl[key] || key;
+  if (vars){
+    Object.keys(vars).forEach(k => { s = s.split('{' + k + '}').join(vars[k]); });
+  }
+  return s;
+}
+
+// Applies the current language to every static [data-i18n] element, input
+// placeholders, the document title/lang attribute, and re-derives any
+// already-rendered dynamic text (file-loaded status, filter dropdowns,
+// results panel) so a language switch mid-session doesn't lose state.
+function applyTranslations(){
+  document.title = t('title');
+  document.documentElement.lang = LANG_TAGS[currentLang] || currentLang;
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    if (el.dataset.state) return; // file-status elements handled below instead
+    el.textContent = t(el.getAttribute('data-i18n'));
+  });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+    el.placeholder = t(el.getAttribute('data-i18n-placeholder'));
+  });
+  document.querySelectorAll('.file-status').forEach(el => {
+    if (el.dataset.state === 'loaded'){
+      el.textContent = t('status_loaded', {name: el.dataset.fileName, count: el.dataset.sheetCount});
+    } else if (el.dataset.state === 'error'){
+      el.textContent = t('status_load_error', {msg: el.dataset.errorMsg});
+    }
+  });
+  populateFilters();
+  if (lastRows && lastRows.length && lastStats){
+    renderResults(lastRows, lastTitle, lastStats, lastFilterInfo);
+  }
+}
+
+// ---------- helpers ----------
+function normBatch(v){
+  if (v === null || v === undefined) return null;
+  let s = String(v).trim().toUpperCase().replace(/\s+/g, ' ');
+  return s === '' ? null : s;
+}
+
+function parseAmount(v){
+  if (v === null || v === undefined || v === '') return null;
+  if (typeof v === 'number') return v;
+  let s = String(v).trim().replace(/[£€$\s]/g, '');
+  if (s === '') return null;
+  if (s.includes(',') && s.includes('.')) {
+    // assume comma = thousands separator
+    s = s.replace(/,/g, '');
+  } else if (s.includes(',') && !s.includes('.')) {
+    // assume comma = decimal separator
+    s = s.replace(',', '.');
+  }
+  let n = parseFloat(s);
+  return isNaN(n) ? null : n;
+}
+
+// Reads a sheet as array-of-arrays and finds the row that looks most like
+// a header row given a list of expected column names (case-insensitive).
+// Returns {headerRowIdx, colIndex: {name: idx}} or null if none found.
+function findHeaderRow(aoa, expectedCols){
+  const maxScan = Math.min(aoa.length, 15);
+  let best = {score: 0, idx: -1};
+  for (let r = 0; r < maxScan; r++){
+    const row = aoa[r] || [];
+    const rowNorm = row.map(c => (c === null || c === undefined) ? '' : String(c).trim().toLowerCase());
+    let score = 0;
+    expectedCols.forEach(name => {
+      if (rowNorm.includes(name.trim().toLowerCase())) score++;
+    });
+    if (score > best.score){ best = {score, idx: r}; }
+  }
+  if (best.idx === -1 || best.score === 0) return null;
+  const headerRow = aoa[best.idx].map(c => (c===null||c===undefined)?'':String(c).trim());
+  const colIndex = {};
+  headerRow.forEach((h, i) => { if (h !== '') colIndex[h.toLowerCase()] = i; });
+  return {headerRowIdx: best.idx, colIndex};
+}
+
+function getColIdx(colIndex, name){
+  const key = (name || '').trim().toLowerCase();
+  return (key in colIndex) ? colIndex[key] : -1;
+}
+
+// Normalizes a week value for grouping/sorting purposes so "4" and "04"
+// are treated as the same week.
+function weekKey(week){
+  if (week === null || week === undefined || String(week).trim() === '') return '(brak)';
+  const n = Number(week);
+  return isNaN(n) ? String(week).trim() : String(n);
+}
+
+// Groups already week-sorted detail rows into consecutive per-week blocks,
+// e.g. [{key:'4', rows:[...]}, {key:'5', rows:[...]}, ...]
+function groupByWeek(rows){
+  const groups = [];
+  let current = null;
+  rows.forEach(r => {
+    const key = weekKey(r.week);
+    if (!current || current.key !== key){
+      current = {key, rows: []};
+      groups.push(current);
+    }
+    current.rows.push(r);
+  });
+  return groups;
+}
+
+// Picks the sheet whose header row best matches the expected columns.
+// Tie-break order when several sheets share the same column score:
+// 1) highest year number found in the sheet name (e.g. prefers
+//    "Batch Status 2026" over "Batch Status 2025v1"),
+// 2) more actual data rows below the header (avoids near-empty template
+//    tabs, e.g. a "Cheque" tab with only a header row and no data),
+// 3) the sheet that appears later in the workbook.
+function pickBestSheet(wb, expectedCols){
+  let best = {score: -1, year: -1, dataRows: -1, order: -1, name: null};
+  wb.SheetNames.forEach((name, order) => {
+    const aoa = XLSX.utils.sheet_to_json(wb.Sheets[name], {header:1, raw:true});
+    const found = findHeaderRow(aoa, expectedCols);
+    if (!found) return;
+    let score = 0;
+    expectedCols.forEach(c => { if (getColIdx(found.colIndex, c) >= 0) score++; });
+    if (score === 0) return;
+    const dataRows = aoa.length - found.headerRowIdx - 1;
+    const yearMatches = name.match(/\d{4}/g);
+    const year = yearMatches ? Math.max(...yearMatches.map(Number)) : -1;
+    const better = (score > best.score) ||
+      (score === best.score && year > best.year) ||
+      (score === best.score && year === best.year && dataRows > best.dataRows) ||
+      (score === best.score && year === best.year && dataRows === best.dataRows && order > best.order);
+    if (better){ best = {score, year, dataRows, order, name}; }
+  });
+  return best.name;
+}
+
+function showError(msg){
+  const box = document.getElementById('errorBox');
+  box.textContent = msg;
+  box.style.display = 'block';
+}
+function clearError(){
+  const box = document.getElementById('errorBox');
+  box.style.display = 'none'; box.textContent = '';
+}
+
+// ---------- file loading ----------
+function wireFileInput(inputId, sheetSelectId, statusId, onLoaded){
+  document.getElementById(inputId).addEventListener('change', function(e){
+    const file = e.target.files[0];
+    const statusEl = document.getElementById(statusId);
+    const sheetSel = document.getElementById(sheetSelectId);
+    if (!file){ return; }
+    delete statusEl.dataset.state;
+    statusEl.textContent = t('status_loading');
+    statusEl.classList.remove('loaded');
+    const reader = new FileReader();
+    reader.onload = function(ev){
+      try{
+        const data = new Uint8Array(ev.target.result);
+        const wb = XLSX.read(data, {type:'array', cellDates:true});
+        sheetSel.innerHTML = '';
+        wb.SheetNames.forEach(name => {
+          const opt = document.createElement('option');
+          opt.value = name; opt.textContent = name;
+          sheetSel.appendChild(opt);
+        });
+        sheetSel.disabled = false;
+        statusEl.dataset.state = 'loaded';
+        statusEl.dataset.fileName = file.name;
+        statusEl.dataset.sheetCount = wb.SheetNames.length;
+        statusEl.textContent = t('status_loaded', {name: file.name, count: wb.SheetNames.length});
+        statusEl.classList.add('loaded');
+        onLoaded(wb, sheetSel);
+      } catch(err){
+        statusEl.dataset.state = 'error';
+        statusEl.dataset.errorMsg = err.message;
+        statusEl.textContent = t('status_load_error', {msg: err.message});
+        statusEl.classList.remove('loaded');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+wireFileInput('statusFile', 'statusSheet', 'statusFileStatus', function(wb, sheetSel){
+  statusWB = wb;
+  const batchCol = document.getElementById('mapStatusBatch').value;
+  const weekCol = document.getElementById('mapStatusWeek').value;
+  const bestSheet = pickBestSheet(wb, [batchCol, weekCol]);
+  if (bestSheet){ sheetSel.value = bestSheet; }
+  populateFilters();
+});
+document.getElementById('statusSheet').addEventListener('change', populateFilters);
+
+wireFileInput('cashFile', 'cashSheet', 'cashFileStatus', function(wb, sheetSel){
+  cashWB = wb;
+  const batchCol = document.getElementById('mapCashBatch').value;
+  const gbpCol = document.getElementById('mapCashGbp').value;
+  const bestSheet = pickBestSheet(wb, [batchCol, gbpCol]);
+  if (bestSheet){ sheetSel.value = bestSheet; }
+});
+
+// ---------- filter dropdowns (Batch name / Batch / Week range) ----------
+// Reads the currently selected Status Payments sheet and fills the two
+// filter dropdowns with the actual values found in the file, so the user
+// picks from real data instead of typing free text.
+let allFilterRows = []; // {batchNorm, batchRaw, batchName, week}
+
+function populateFilters(){
+  const batchNameSel = document.getElementById('filterBatchName');
+  const batchList = document.getElementById('filterBatchList');
+  const prevBatchNameVal = batchNameSel.value;
+  if (!statusWB){
+    batchNameSel.innerHTML = '<option value="">' + t('opt_upload_status') + '</option>';
+    batchList.innerHTML = '<div class="checkbox-list-empty">' + t('opt_upload_status') + '</div>';
+    batchNameSel.disabled = true;
+    allFilterRows = [];
+    return;
+  }
+  const sheetName = document.getElementById('statusSheet').value;
+  if (!sheetName) return;
+  const mapBatch = document.getElementById('mapStatusBatch').value;
+  const mapWeek = document.getElementById('mapStatusWeek').value;
+  const mapBatchName = document.getElementById('mapStatusBatchName').value;
+
+  const aoa = XLSX.utils.sheet_to_json(statusWB.Sheets[sheetName], {header:1, raw:true});
+  const found = findHeaderRow(aoa, [mapBatch, mapWeek]);
+  if (!found) return;
+  const bIdx = getColIdx(found.colIndex, mapBatch);
+  const wIdx = getColIdx(found.colIndex, mapWeek);
+  const nIdx = getColIdx(found.colIndex, mapBatchName);
+  if (bIdx < 0) return;
+
+  allFilterRows = [];
+  for (let r = found.headerRowIdx + 1; r < aoa.length; r++){
+    const row = aoa[r] || [];
+    const rawBatch = row[bIdx];
+    if (rawBatch === undefined || rawBatch === null || String(rawBatch).trim() === '') continue;
+    allFilterRows.push({
+      batchNorm: normBatch(rawBatch),
+      batchRaw: String(rawBatch).trim(),
+      batchName: (nIdx >= 0 && row[nIdx] !== undefined && row[nIdx] !== null) ? String(row[nIdx]).trim() : null,
+      week: (wIdx >= 0) ? row[wIdx] : null,
+    });
+  }
+
+  const uniqueNames = [...new Set(allFilterRows.map(r => r.batchName).filter(v => v))].sort((a,b) => a.localeCompare(b));
+  batchNameSel.innerHTML = '<option value="">' + t('opt_filter_all') + '</option>' +
+    uniqueNames.map(n => '<option value="' + n.replace(/"/g,'&quot;') + '">' + n + '</option>').join('');
+  batchNameSel.disabled = false;
+  if (uniqueNames.includes(prevBatchNameVal)) batchNameSel.value = prevBatchNameVal;
+
+  refreshBatchDropdown();
+}
+
+// Rebuilds the "Batch" checkbox list, restricted to the client currently
+// picked in the "Batch name" dropdown (or all batches if "All" is
+// selected). No checkbox ticked means "no filter, include every batch".
+// Preserves any previously-ticked batches (e.g. across a language switch).
+function refreshBatchDropdown(){
+  const batchNameSel = document.getElementById('filterBatchName');
+  const batchList = document.getElementById('filterBatchList');
+  const prevChecked = new Set(getSelectedBatches());
+  const selectedName = batchNameSel.value;
+  const subset = selectedName ? allFilterRows.filter(r => r.batchName === selectedName) : allFilterRows;
+  const uniqueBatches = [...new Set(subset.map(r => r.batchRaw))].sort((a,b) => a.localeCompare(b));
+  if (uniqueBatches.length === 0){
+    batchList.innerHTML = '<div class="checkbox-list-empty">' + t('no_batches_for_filter') + '</div>';
+    return;
+  }
+  batchList.innerHTML = uniqueBatches.map(b => {
+    const esc = b.replace(/"/g, '&quot;');
+    const checkedAttr = prevChecked.has(b) ? ' checked' : '';
+    return '<label><input type="checkbox" value="' + esc + '"' + checkedAttr + '> ' + b + '</label>';
+  }).join('');
+}
+document.getElementById('filterBatchName').addEventListener('change', refreshBatchDropdown);
+
+// Returns the batch codes currently ticked in the checkbox list.
+function getSelectedBatches(){
+  return Array.from(document.querySelectorAll('#filterBatchList input[type=checkbox]:checked')).map(cb => cb.value);
+}
+document.getElementById('selectAllBatches').addEventListener('click', () => {
+  document.querySelectorAll('#filterBatchList input[type=checkbox]').forEach(cb => { cb.checked = true; });
+});
+document.getElementById('clearBatches').addEventListener('click', () => {
+  document.querySelectorAll('#filterBatchList input[type=checkbox]').forEach(cb => { cb.checked = false; });
+});
+
+// ---------- core generation ----------
+function generateSRM(){
+  clearError();
+  document.getElementById('resultsCard').style.display = 'none';
+  document.getElementById('downloadBtn').disabled = true;
+
+  if (!statusWB){ showError(t('err_no_status_file')); return; }
+  if (!cashWB){ showError(t('err_no_cash_file')); return; }
+
+  const statusSheetName = document.getElementById('statusSheet').value;
+  const cashSheetName = document.getElementById('cashSheet').value;
+  if (!statusSheetName || !cashSheetName){ showError(t('err_no_sheet_selected')); return; }
+
+  const mapStatusBatch = document.getElementById('mapStatusBatch').value;
+  const mapStatusWeek = document.getElementById('mapStatusWeek').value;
+  const mapStatusBatchName = document.getElementById('mapStatusBatchName').value;
+  const mapCashBatch = document.getElementById('mapCashBatch').value;
+  const mapCashGbp = document.getElementById('mapCashGbp').value;
+  const mapCashPloa = document.getElementById('mapCashPloa').value;
+  const mapCashWeek = document.getElementById('mapCashWeek').value;
+  const mapCashBranch = document.getElementById('mapCashBranch').value;
+  const mapCashEur = document.getElementById('mapCashEur').value;
+  const mapCashOther = document.getElementById('mapCashOther').value;
+  const mapCashCcy = document.getElementById('mapCashCcy').value;
+
+  // ----- parse Status Payments -----
+  const statusAOA = XLSX.utils.sheet_to_json(statusWB.Sheets[statusSheetName], {header:1, raw:true});
+  const statusHeader = findHeaderRow(statusAOA, [mapStatusBatch, mapStatusWeek]);
+  if (!statusHeader){
+    showError(t('err_columns_not_found', {a: mapStatusBatch, b: mapStatusWeek, sheet: statusSheetName}));
+    return;
+  }
+  const sBatchIdx = getColIdx(statusHeader.colIndex, mapStatusBatch);
+  const sWeekIdx = getColIdx(statusHeader.colIndex, mapStatusWeek);
+  const sBatchNameIdx = getColIdx(statusHeader.colIndex, mapStatusBatchName);
+  if (sBatchIdx < 0){ showError(t('err_batch_col_not_found_status', {col: mapStatusBatch})); return; }
+
+  let statusRows = [];
+  for (let r = statusHeader.headerRowIdx + 1; r < statusAOA.length; r++){
+    const row = statusAOA[r] || [];
+    const rawBatch = row[sBatchIdx];
+    if (rawBatch === undefined || rawBatch === null || String(rawBatch).trim() === '') continue;
+    const bNorm = normBatch(rawBatch);
+    const week = (sWeekIdx >= 0) ? row[sWeekIdx] : null;
+    const batchName = (sBatchNameIdx >= 0 && row[sBatchNameIdx] !== undefined && row[sBatchNameIdx] !== null) ? String(row[sBatchNameIdx]).trim() : null;
+    statusRows.push({ batchNorm: bNorm, batchRaw: String(rawBatch).trim(), week: week, batchName: batchName });
+  }
+
+  // ----- apply filters (Batch name / Batch(es) / week range) -----
+  const fBatchName = document.getElementById('filterBatchName').value;
+  const fBatches = getSelectedBatches();
+  const fWeekFromRaw = document.getElementById('filterWeekFrom').value.trim();
+  const fWeekToRaw = document.getElementById('filterWeekTo').value.trim();
+  const fWeekFrom = fWeekFromRaw !== '' ? Number(fWeekFromRaw) : null;
+  const fWeekTo = fWeekToRaw !== '' ? Number(fWeekToRaw) : null;
+  const fBatchNormSet = new Set(fBatches.map(normBatch));
+
+  if (fBatchName){ statusRows = statusRows.filter(r => r.batchName === fBatchName); }
+  if (fBatchNormSet.size > 0){ statusRows = statusRows.filter(r => fBatchNormSet.has(r.batchNorm)); }
+  if (fWeekFrom !== null || fWeekTo !== null){
+    statusRows = statusRows.filter(r => {
+      if (r.week === null || r.week === undefined || String(r.week).trim() === '') return true; // keep - flagged as missing week anyway
+      const w = Number(r.week);
+      if (isNaN(w)) return true;
+      if (fWeekFrom !== null && w < fWeekFrom) return false;
+      if (fWeekTo !== null && w > fWeekTo) return false;
+      return true;
+    });
+  }
+
+  if (statusRows.length === 0){
+    showError(t('err_no_batches_match_filters'));
+    return;
+  }
+
+  const batchOccurrences = {};
+  statusRows.forEach(r => { batchOccurrences[r.batchNorm] = (batchOccurrences[r.batchNorm] || 0) + 1; });
+
+  // Week per batch as known from Status Payments - used as a fallback when a
+  // Cash transaction is missing its own Week value (this happens a lot in
+  // the real data), so rows don't get dumped into an "unknown week" bucket
+  // when the week is actually known from the batch itself.
+  const statusWeekByBatch = {};
+  statusRows.forEach(r => {
+    if (!(r.batchNorm in statusWeekByBatch) && r.week !== null && r.week !== undefined && String(r.week).trim() !== ''){
+      statusWeekByBatch[r.batchNorm] = r.week;
+    }
+  });
+
+  // ----- parse Cash: pull individual GBP transactions for the qualifying batches -----
+  const cashAOA = XLSX.utils.sheet_to_json(cashWB.Sheets[cashSheetName], {header:1, raw:true});
+  const cashHeader = findHeaderRow(cashAOA, [mapCashBatch, mapCashGbp]);
+  if (!cashHeader){
+    showError(t('err_columns_not_found', {a: mapCashBatch, b: mapCashGbp, sheet: cashSheetName}));
+    return;
+  }
+  const cBatchIdx = getColIdx(cashHeader.colIndex, mapCashBatch);
+  const cGbpIdx = getColIdx(cashHeader.colIndex, mapCashGbp);
+  const cPloaIdx = getColIdx(cashHeader.colIndex, mapCashPloa);
+  const cWeekIdx = getColIdx(cashHeader.colIndex, mapCashWeek);
+  const cBranchIdx = getColIdx(cashHeader.colIndex, mapCashBranch);
+  const cEurIdx = getColIdx(cashHeader.colIndex, mapCashEur);
+  const cOtherIdx = getColIdx(cashHeader.colIndex, mapCashOther);
+  if (cBatchIdx < 0){ showError(t('err_batch_col_not_found_cash', {col: mapCashBatch})); return; }
+
+  const qualifyingBatches = new Set(statusRows.map(r => r.batchNorm));
+  const detailRows = [];
+  let nonGbpCount = 0; // Cash rows for qualifying batches that only have EUR/other-currency amounts
+
+  for (let r = cashHeader.headerRowIdx + 1; r < cashAOA.length; r++){
+    const row = cashAOA[r] || [];
+    const rawBatch = row[cBatchIdx];
+    const bNorm = normBatch(rawBatch);
+    if (bNorm === null || !qualifyingBatches.has(bNorm)) continue;
+    const gbp = cGbpIdx >= 0 ? parseAmount(row[cGbpIdx]) : null;
+    if (gbp !== null){
+      const cashWeek = cWeekIdx >= 0 ? row[cWeekIdx] : null;
+      const hasCashWeek = cashWeek !== null && cashWeek !== undefined && String(cashWeek).trim() !== '';
+      detailRows.push({
+        ploa: cPloaIdx >= 0 ? row[cPloaIdx] : null,
+        week: hasCashWeek ? cashWeek : (statusWeekByBatch[bNorm] ?? null),
+        batch: String(rawBatch).trim(),
+        branch: cBranchIdx >= 0 ? row[cBranchIdx] : null,
+        gbp: gbp,
+      });
+    } else {
+      const eur = cEurIdx >= 0 ? parseAmount(row[cEurIdx]) : null;
+      const other = cOtherIdx >= 0 ? parseAmount(row[cOtherIdx]) : null;
+      if (eur !== null || other !== null) nonGbpCount++;
+    }
+  }
+
+  if (detailRows.length === 0){
+    showError(t('err_no_cash_transactions'));
+    return;
+  }
+
+  detailRows.sort((a,b) => {
+    const wa = weekKey(a.week), wb_ = weekKey(b.week);
+    if (wa !== wb_){
+      const na = Number(wa), nb = Number(wb_);
+      if (!isNaN(na) && !isNaN(nb)) return na - nb;
+      return wa.localeCompare(wb_);
+    }
+    const pa = Number(a.ploa), pb = Number(b.ploa);
+    if (!isNaN(pa) && !isNaN(pb) && pa !== pb) return pa - pb;
+    return String(a.batch).localeCompare(String(b.batch));
+  });
+
+  // ----- title, matching the "Cash submitted in <name> batches (Weeks NN-NN)" style -----
+  let label;
+  if (fBatchName){ label = fBatchName; }
+  else if (fBatches.length === 1){ label = fBatches[0]; }
+  else if (fBatches.length > 1){ label = fBatches.length + ' wybranych'; }
+  else { label = 'wszystkich'; }
+
+  const weeksPresent = detailRows.map(r => Number(weekKey(r.week))).filter(w => !isNaN(w));
+  const wkFrom = fWeekFrom !== null ? fWeekFrom : (weeksPresent.length ? Math.min(...weeksPresent) : null);
+  const wkTo = fWeekTo !== null ? fWeekTo : (weeksPresent.length ? Math.max(...weeksPresent) : null);
+  const wkFromLabel = wkFrom !== null ? String(wkFrom).padStart(2,'0') : '??';
+  const wkToLabel = wkTo !== null ? String(wkTo).padStart(2,'0') : '??';
+  const title = 'Cash submitted in ' + label + ' batches (Weeks ' + wkFromLabel + '-' + wkToLabel + ')';
+
+  // ----- stats for the on-screen summary panel only (not part of the file) -----
+  const uniqueQualifying = new Set(statusRows.map(r => r.batchNorm));
+  const batchesWithCash = new Set(detailRows.map(r => normBatch(r.batch)));
+  let nNoWeek = 0, nDuplicates = 0;
+  statusRows.forEach(r => {
+    if (r.week === null || r.week === undefined || String(r.week).trim() === '') nNoWeek++;
+    if (batchOccurrences[r.batchNorm] > 1) nDuplicates++;
+  });
+
+  lastRows = detailRows;
+  lastTitle = title;
+  lastFilterInfo = {
+    batchName: fBatchName || null,
+    batches: fBatches.length ? fBatches : null,
+    weekFrom: fWeekFrom,
+    weekTo: fWeekTo,
+  };
+  lastStats = {
+    totalBatches: uniqueQualifying.size,
+    matched: batchesWithCash.size,
+    noAmount: uniqueQualifying.size - batchesWithCash.size,
+    noWeek: nNoWeek,
+    duplicates: nDuplicates,
+    nonGbpCount: nonGbpCount,
+  };
+
+  renderResults(lastRows, lastTitle, lastStats, lastFilterInfo);
+  document.getElementById('downloadBtn').disabled = false;
+}
+
+function renderResults(rows, title, stats, filterInfo){
+  document.getElementById('resultsCard').style.display = 'block';
+  let msg = t('msg_success', {count: rows.length});
+  if (filterInfo){
+    const parts = [];
+    if (filterInfo.batchName) parts.push(t('filter_display_batchname', {name: filterInfo.batchName}));
+    if (filterInfo.batches) parts.push(t('filter_display_batch', {list: filterInfo.batches.join(', ')}));
+    if (filterInfo.weekFrom !== null || filterInfo.weekTo !== null){
+      parts.push(t('filter_display_week', {from: filterInfo.weekFrom ?? '…', to: filterInfo.weekTo ?? '…'}));
+    }
+    if (parts.length) msg += t('filters_prefix') + parts.join(', ') + '.';
+  }
+  document.getElementById('statusLine').textContent = msg;
+  document.getElementById('reportTitleLine').textContent = title;
+
+  const grid = document.getElementById('summaryGrid');
+  grid.innerHTML = '';
+  const cards = [
+    [stats.totalBatches, t('stat_total_batches')],
+    [stats.matched, t('stat_matched')],
+    [stats.noAmount, t('stat_no_amount')],
+    [stats.noWeek, t('stat_no_week')],
+    [stats.duplicates, t('stat_duplicates')],
+  ];
+  cards.forEach(([num,label]) => {
+    const d = document.createElement('div');
+    d.className = 'stat';
+    d.innerHTML = '<div class="num">' + num + '</div><div class="lbl">' + label + '</div>';
+    grid.appendChild(d);
+  });
+
+  const tbody = document.getElementById('resultBody');
+  tbody.innerHTML = '';
+  const groups = groupByWeek(rows);
+  let grandTotal = 0;
+  groups.forEach(g => {
+    let weekSum = 0;
+    g.rows.forEach(r => {
+      weekSum += r.gbp; grandTotal += r.gbp;
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td>' + (r.ploa ?? '') + '</td><td>' + (r.week ?? '') + '</td><td>' + r.batch + '</td><td>' + (r.branch ?? '') + '</td><td>£' + r.gbp.toFixed(2) + '</td>';
+      tbody.appendChild(tr);
+    });
+    const trSum = document.createElement('tr');
+    trSum.className = 'subtotal';
+    trSum.innerHTML = '<td></td><td>' + g.key + ' Sum</td><td></td><td></td><td>£' + weekSum.toFixed(2) + '</td>';
+    tbody.appendChild(trSum);
+  });
+  const trTotal = document.createElement('tr');
+  trTotal.className = 'grandtotal';
+  trTotal.innerHTML = '<td></td><td>Sum Totals</td><td></td><td></td><td>£' + grandTotal.toFixed(2) + '</td>';
+  tbody.appendChild(trTotal);
+
+  const noteEl = document.getElementById('nonGbpNote');
+  noteEl.textContent = stats.nonGbpCount > 0
+    ? t('note_non_gbp', {count: stats.nonGbpCount})
+    : '';
+}
+
+// Colors matching the reference "Cash submitted in Asda batches" template.
+const STYLE = {
+  navy: 'FF224B50',
+  headerFill: 'FF4DFFA8',
+  bandFill: 'FFF2F2F2',
+  subtotalFill: 'FFE2F0EC',
+  grandTotalFill: 'FFCFE3DC',
+};
+const THIN_BORDER = {
+  top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'},
+};
+
+function buildDownloadFilename(){
+  const d = new Date();
+  const dateStr = d.getFullYear() + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0');
+  let namePart = '';
+  if (lastFilterInfo){
+    if (lastFilterInfo.batchName) namePart += '_' + lastFilterInfo.batchName.replace(/[^a-zA-Z0-9]+/g, '');
+    if (lastFilterInfo.batches){
+      namePart += lastFilterInfo.batches.length <= 2
+        ? '_' + lastFilterInfo.batches.map(b => b.replace(/[^a-zA-Z0-9]+/g, '')).join('-')
+        : '_' + lastFilterInfo.batches.length + 'batches';
+    }
+    if (lastFilterInfo.weekFrom !== null || lastFilterInfo.weekTo !== null){
+      const wf = lastFilterInfo.weekFrom !== null ? String(lastFilterInfo.weekFrom).padStart(2,'0') : '..';
+      const wt = lastFilterInfo.weekTo !== null ? String(lastFilterInfo.weekTo).padStart(2,'0') : '..';
+      namePart += '_wk' + wf + '-' + wt;
+    }
+  }
+  return 'SRM_report' + namePart + '_' + dateStr + '.xlsx';
+}
+
+// Builds the fully-styled workbook with ExcelJS (colors/fonts/borders survive
+// in the downloaded file, unlike the free SheetJS build used for reading
+// above) and triggers a browser download - no server, no output folder
+// needed, so anyone opening the file sees the same look regardless of who
+// generated it.
+async function downloadSRM(){
+  if (!lastRows || !lastRows.length) return;
+  const btn = document.getElementById('downloadBtn');
+  btn.disabled = true;
+  const originalLabel = btn.textContent;
+  btn.textContent = t('btn_generating');
+  try {
+    const groups = groupByWeek(lastRows);
+    const wb = new ExcelJS.Workbook();
+
+    // ----- "Report" sheet -----
+    const ws = wb.addWorksheet('Report');
+    ws.columns = [{width:10},{width:9},{width:14},{width:10},{width:12}];
+
+    ws.getCell(1,1).value = lastTitle;
+    ws.getCell(1,1).font = { name:'Calibri', size:16, bold:true, color:{argb:STYLE.navy} };
+    ws.getRow(1).height = 21;
+
+    const headers = ['PLOA','Week','Batch','Branch','GBP'];
+    headers.forEach((h, i) => {
+      const cell = ws.getCell(3, i+1);
+      cell.value = h;
+      cell.font = { name:'Calibri', size:11, bold:true, color:{argb:STYLE.navy} };
+      cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:STYLE.headerFill} };
+      cell.border = THIN_BORDER;
+      if (h === 'GBP') cell.numFmt = '£#,##0.00';
+    });
+
+    let row = 4;
+    const firstDataRow = row;
+    let bandToggle = 0;
+
+    function writeSubtotalRow(key, startRow, endRow){
+      for (let c = 1; c <= 4; c++){
+        const cell = ws.getCell(row, c);
+        cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:STYLE.subtotalFill} };
+        cell.border = THIN_BORDER;
+      }
+      ws.getCell(row, 2).value = key + ' Sum';
+      ws.getCell(row, 2).font = { name:'Calibri', size:11, bold:true };
+      const fcell = ws.getCell(row, 5);
+      fcell.value = { formula: 'SUBTOTAL(9,E' + startRow + ':E' + endRow + ')' };
+      fcell.font = { name:'Calibri', size:11, bold:true };
+      fcell.numFmt = '£#,##0.00';
+      fcell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:STYLE.subtotalFill} };
+      fcell.border = THIN_BORDER;
+      row++;
+    }
+
+    groups.forEach(g => {
+      const startRow = row;
+      bandToggle = 1 - bandToggle;
+      g.rows.forEach(r => {
+        const values = [r.ploa ?? null, r.week ?? null, r.batch, r.branch ?? null, r.gbp];
+        values.forEach((v, i) => {
+          const cell = ws.getCell(row, i+1);
+          cell.value = v;
+          cell.font = { name:'Calibri', size:11 };
+          cell.border = THIN_BORDER;
+          if (bandToggle) cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:STYLE.bandFill} };
+          if (i === 4) cell.numFmt = '£#,##0.00';
+        });
+        row++;
+      });
+      writeSubtotalRow(g.key, startRow, row - 1);
+    });
+
+    const lastSubtotalRow = row - 1;
+    for (let c = 1; c <= 5; c++){
+      const cell = ws.getCell(row, c);
+      cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:STYLE.grandTotalFill} };
+      cell.border = THIN_BORDER;
+    }
+    ws.getCell(row, 2).value = 'Sum Totals';
+    ws.getCell(row, 2).font = { name:'Calibri', size:12, bold:true, color:{argb:STYLE.navy} };
+    const gtCell = ws.getCell(row, 5);
+    gtCell.value = { formula: 'SUBTOTAL(9,E' + firstDataRow + ':E' + lastSubtotalRow + ')' };
+    gtCell.font = { name:'Calibri', size:12, bold:true, color:{argb:STYLE.navy} };
+    gtCell.numFmt = '£#,##0.00';
+
+    // ----- "dane" backup sheet (plain, matching the reference file) -----
+    const wsDane = wb.addWorksheet('dane');
+    const daneHeaders = ['PLOA','Week','Batch','Branch','Value £'];
+    daneHeaders.forEach((h, i) => { wsDane.getCell(3, i+2).value = h; });
+    let dr = 4;
+    lastRows.forEach(r => {
+      wsDane.getCell(dr, 2).value = r.ploa ?? null;
+      wsDane.getCell(dr, 3).value = r.week ?? null;
+      wsDane.getCell(dr, 4).value = r.batch;
+      wsDane.getCell(dr, 5).value = r.branch ?? null;
+      wsDane.getCell(dr, 6).value = r.gbp;
+      wsDane.getCell(dr, 6).numFmt = '£#,##0.00';
+      dr++;
+    });
+    const daneSumCell = wsDane.getCell(dr, 6);
+    daneSumCell.value = { formula: 'SUM(F4:F' + (dr - 1) + ')' };
+    daneSumCell.numFmt = '£#,##0.00';
+    daneSumCell.font = { bold: true };
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = buildDownloadFilename();
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch(err){
+    showError(t('err_generating_file', {msg: err.message}));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalLabel;
+  }
+}
+
+document.getElementById('generateBtn').addEventListener('click', generateSRM);
+document.getElementById('downloadBtn').addEventListener('click', downloadSRM);
+
+document.getElementById('langSelect').addEventListener('change', function(e){
+  currentLang = e.target.value;
+  applyTranslations();
+});
+document.getElementById('langSelect').value = currentLang;
+applyTranslations();
+</script>
+</body>
+</html>
